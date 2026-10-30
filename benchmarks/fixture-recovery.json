@@ -1,0 +1,125 @@
+{
+  "validation": "controlled_http_fixture",
+  "runs": [
+    {
+      "mode": "observable",
+      "fault": "before_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 3.32
+    },
+    {
+      "mode": "observable",
+      "fault": "before_commit",
+      "policy": "reconcile",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 10.99
+    },
+    {
+      "mode": "observable",
+      "fault": "after_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 2,
+      "duplicates": 1,
+      "elapsed_ms": 8.45
+    },
+    {
+      "mode": "observable",
+      "fault": "after_commit",
+      "policy": "reconcile",
+      "state": "verified",
+      "attempts": 1,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 17.57
+    },
+    {
+      "mode": "opaque",
+      "fault": "before_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 3.81
+    },
+    {
+      "mode": "opaque",
+      "fault": "before_commit",
+      "policy": "reconcile",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 33.8
+    },
+    {
+      "mode": "opaque",
+      "fault": "after_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 2,
+      "duplicates": 1,
+      "elapsed_ms": 6.85
+    },
+    {
+      "mode": "opaque",
+      "fault": "after_commit",
+      "policy": "reconcile",
+      "state": "needs_review",
+      "attempts": 1,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 10.78
+    },
+    {
+      "mode": "idempotent",
+      "fault": "before_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 3.38
+    },
+    {
+      "mode": "idempotent",
+      "fault": "before_commit",
+      "policy": "reconcile",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 10.17
+    },
+    {
+      "mode": "idempotent",
+      "fault": "after_commit",
+      "policy": "naive_retry",
+      "state": "verified",
+      "attempts": 2,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 2.7
+    },
+    {
+      "mode": "idempotent",
+      "fault": "after_commit",
+      "policy": "reconcile",
+      "state": "verified",
+      "attempts": 1,
+      "records": 1,
+      "duplicates": 0,
+      "elapsed_ms": 13.37
+    }
+  ]
+}
