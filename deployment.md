@@ -1,6 +1,6 @@
 # Checkpoint service deployment
 
-This repository now includes a same-origin Node HTTP service and an isolated Python recovery worker. It is ready for local/container validation; no live hosting, vendor integration or deployed production reliability is claimed.
+This repository now includes a same-origin Node HTTP service and an isolated Python recovery worker. The live frontend is [steel-checkpoint.vercel.app](https://steel-checkpoint.vercel.app/) and its Docker backend is [checkpoint-production-81f4.up.railway.app](https://checkpoint-production-81f4.up.railway.app). The browser-to-backend comparison and theme persistence have been verified. This remains a controlled synthetic laboratory; no Steel integration or production reliability guarantee is claimed.
 
 ## Local startup
 
@@ -61,7 +61,7 @@ The backend validates this setting at startup and only grants API CORS access to
 
 Railway terminates TLS before the plain HTTP Node listener. A browser opening the backend domain's own HTTPS UI is therefore **not** automatically treated as a verified same-connection origin; that direct HTTPS UI path is not a configured supported frontend until separately validated. The intended public browser path is Vercel's explicitly allowed origin. Local HTTP same-origin use is preserved. Never weaken this check by trusting arbitrary forwarding headers.
 
-After both real domains exist, verify the deployed Vercel page, rewritten readiness, a real default comparison, opaque abstention, idempotent control, delayed evidence, theme persistence and report download. Confirm rejected near-match origins and 429 behavior separately. The Railway backend has been deployed. The frontend deployment and complete browser-to-backend flow must be verified separately; configuration publication alone does not establish frontend readiness.
+After both real domains exist, verify the deployed Vercel page, rewritten readiness, a real default comparison, opaque abstention, idempotent control, delayed evidence, theme persistence and report download. Confirm rejected near-match origins and 429 behavior separately. Live verification is complete for Vercel Git deployment `dpl_41somtdXswvt85BgBTPKQPuXQw7Q` at source commit `34ed17000782197a6b783c27649bfd1af9ca58b8`, with the Railway backend successfully deployed. The actual browser flow produced two attempts/two records/one duplicate for the observable naive baseline versus one attempt/one record/no duplicate for reconciliation; the opaque control remained `needs_review`. Light/dark theme preference survived reload. These observations validate this deployed fictional workflow, not a Steel integration, real merchant behavior or a general reliability guarantee.
 
 ## References
 

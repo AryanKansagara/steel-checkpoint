@@ -1,5 +1,7 @@
 # Checkpoint
 
+[Live demo](https://steel-checkpoint.vercel.app/)
+
 **An executable recovery laboratory for uncertain external actions.** Persist an intent, submit a synthetic invoice over HTTP, lose the acknowledgement, and investigate the destination before retrying. Compare this with a naive retry that creates a duplicate.
 
 This is an independent portfolio research prototype inspired by browser-agent reliability problems. **It is not affiliated with Steel, has no Steel integration yet, and does not claim browser recovery validation.** All demonstrated actions use a controlled local HTTP merchant with fictional invoices. No real billing or account access occurs.
@@ -8,7 +10,7 @@ This is an independent portfolio research prototype inspired by browser-agent re
 
 Run `npm run dev` with Node.js 22+ and Python 3.11+ to open the interactive comparison on port 3000. The service executes the actual loopback HTTP/SQLite recovery experiment for each request, using independent merchants and journals for the naive baseline and reconciliation. The browser-facing interface displays actual journal traces, pending polling and labeled evaluation-oracle counts. It does not automate a browser or call Steel.
 
-The underlying destination binding, crash-atomic migration and single-host ownership checks remain intact. The service adds bounded worker isolation, strict JSON requests, capacity/rate limits, cleanup after disconnect/timeout, safe same-origin assets and graceful shutdown. Run `npm test` and `npm run smoke`; see [deployment.md](deployment.md) for exact API, runtime/container setup and operational limits. Local verification passes 26 existing Python tests plus 20 HTTP/lifecycle tests and 15 frontend evidence/theme tests. Docker/hosted deployment and Steel integration remain unverified.
+The underlying destination binding, crash-atomic migration and single-host ownership checks remain intact. The service adds bounded worker isolation, strict JSON requests, capacity/rate limits, cleanup after disconnect/timeout, safe same-origin assets and graceful shutdown. Run `npm test` and `npm run smoke`; see [deployment.md](deployment.md) for exact API, runtime/container setup and operational limits. Local verification passes 26 existing Python tests plus 20 HTTP/lifecycle tests and 15 frontend evidence/theme tests. The Docker smoke and live Vercel-to-Railway comparison have passed verification. Steel integration remains unverified.
 
 ## Run
 
@@ -98,7 +100,7 @@ Primary sources consulted on 2026-10-29:
 
 ## Boundaries and next work
 
-- This prototype is a **single-host local HTTP laboratory** with mutually exclusive process ownership through POSIX file locking. It is not a production agent, browser SDK, queue service, or deployed application. It has no distributed lease, destination fencing, or cross-host coordination.
+- This prototype is a **single-host local HTTP laboratory** with mutually exclusive process ownership through POSIX file locking. It is not a production agent, browser SDK or queue service. It has no distributed lease, destination fencing, or cross-host coordination.
 - No generic exactly-once guarantee is possible here. The observable fixture's lookup is synchronous and reference matching is simple. Production reconciliation needs domain-specific evidence, uniqueness, authorization, and visibility assumptions.
 - An empty lookup is deliberately not treated as permission to retry. This trades completion for an honest unresolved outcome. Human review is an explicit state, not an implemented approval interface.
 - The retry permission comes from the fixture's explicit `committed: false` contract. A generic HTTP 503 must never be interpreted this way without such a guarantee.
