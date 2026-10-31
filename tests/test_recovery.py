@@ -9,6 +9,9 @@ from checkpoint.fixture import Merchant, serve
 
 def crash_after_submit(path, url):
     journal = Journal(path)
+    # A real executor must establish its destination before any external action.
+    with journal.owned():
+        journal.bind_destination(url)
     journal.plan("durable", 100)
     journal.set("durable", "executing", "Persisted before submit", attempt=True)
     HTTPMerchant(url).submit("durable", 100)
