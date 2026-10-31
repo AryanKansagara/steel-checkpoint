@@ -4,16 +4,21 @@
 
 This is an independent portfolio research prototype inspired by browser-agent reliability problems. **It is not affiliated with Steel, has no Steel integration yet, and does not claim browser recovery validation.** All demonstrated actions use a controlled local HTTP merchant with fictional invoices. No real billing or account access occurs.
 
+## Current milestone: destination-bound, owned recovery
+
+The next core milestone adds immutable journal-to-destination binding, single-host process ownership, explicit delayed-evidence polling, strict HTTP response-shape checks, and a browser-facing synthetic invoice portal. **26 local tests pass** at this milestone, including the original ten recovery scenarios. Browser interaction and Steel cloud integration are still unverified. The portal is HTTP-tested, not browser-tested.
+
 ## Run
 
-Python 3.11+; no runtime dependencies or API keys. From the repository root:
+Python 3.11+ on Linux/macOS (POSIX `flock`); no runtime dependencies or API keys. From the repository root:
 
 ```sh
 python -m unittest discover -s tests -v
 python -m checkpoint demo
+python -m checkpoint portal --port 8765 --visibility-delay 5 --fault after_commit
 ```
 
-The demo starts ephemeral localhost HTTP services, creates temporary SQLite stores, executes twelve cases, emits JSON, and cleans up. `python -m checkpoint --help` documents the CLI. Docker is optional:
+The demo starts ephemeral localhost HTTP services, creates temporary SQLite stores, executes twelve cases, emits JSON, and cleans up. `portal` instead runs a persistent localhost merchant at the printed URL, stores fictional records under `.checkpoint-state/`, and stops with Ctrl+C. Its form creates a fictional invoice and its lookup/read-only-state controls display visible evidence. A lost acknowledgement is shown as unknown, not an invitation to retry. The portal does not invoke the recovery journal; it is the controlled destination for a future browser adapter. `python -m checkpoint --help` documents the CLI. Docker is optional:
 
 ```sh
 docker build -t checkpoint-lab .
@@ -26,8 +31,9 @@ docker run --rm checkpoint-lab
 2. A matching destination acknowledgement verifies completion.
 3. A fixture-specific explicit rejection before commit authorizes one retry.
 4. A missing acknowledgement enters reconciliation. One matching durable receipt verifies success without resubmission.
-5. Missing lookup capability, no visible record, duplicate matches, or conflicting evidence enters `needs_review` without resubmitting.
-6. Restarting against an `executing` journal entry reconciles first. A test kills a real child process after submission and recovers from the persisted journal in the parent.
+5. Missing lookup capability, an ordinary empty search, duplicate matches, or conflicting evidence enters `needs_review` without resubmitting.
+6. A destination-specific explicit `pending` response can keep the intent `pending` while delayed evidence becomes visible. Each `run` performs at most one lookup. Its persisted pending count reaches `needs_review` at the configured budget; no background polling or side-effect retry is scheduled. A later explicit lookup can still verify a unique receipt.
+7. Restarting against an `executing` journal entry reconciles first. A test kills a real child process after submission and recovers from the persisted journal in the parent.
 
 ```mermaid
 flowchart TD
@@ -37,10 +43,14 @@ flowchart TD
     R --> E
     E -->|Unknown outcome or restart| C[Reconcile]
     C -->|Unique matching receipt| V
-    C -->|Absent, conflicting, or unavailable evidence| H[Needs review]
+    C -->|Explicit pending, budget remains| W[Pending evidence]
+    W -->|Next explicit poll| C
+    C -->|Absent, conflict, unavailable, or exhausted budget| H[Needs review]
 ```
 
-Every transition has a durable event record with its reason. Amounts are positive integer minor units; the same reference cannot be reused for a different amount. A single journal belongs to one fixed destination and one runner owner.
+Every transition has a durable event record with its reason. Amounts are positive integer minor units; the same reference cannot be reused for a different amount. A journal is immutably bound to its first canonical loopback HTTP origin before business actions. A different destination is rejected even when an intent is already verified. Schema creation and the legacy safety marker commit atomically. Reopening any populated journal without destination evidence is rejected for inspection/export rather than silently adopted, including artifacts from interrupted older migrations. Low-level callers must bind the destination before external actions or persisting work that needs recovery after a restart. Use a stable port for a destination that needs to survive server restarts; changing the port changes the origin.
+
+A nonblocking OS file lock owns the canonical journal path for the complete `run` or explicit `reconcile`. A competing process receives `OwnershipBusy` before planning or submitting. The kernel releases ownership on normal exit or process death; a leftover lock file is not ownership and must not be deleted to bypass a running owner. Low-level `Journal` methods are storage primitives, not an alternative concurrency-safe runner API. Hard-link aliases, network filesystems, and distributed actors are unsupported.
 
 ## Experiment
 
@@ -86,11 +96,11 @@ Primary sources consulted on 2026-10-29:
 
 ## Boundaries and next work
 
-- This prototype is a **single-owner local HTTP laboratory**. It is not a production agent, browser SDK, queue service, or deployed application. Concurrent owners are unsupported; there is no distributed lease or fencing.
+- This prototype is a **single-host local HTTP laboratory** with mutually exclusive process ownership through POSIX file locking. It is not a production agent, browser SDK, queue service, or deployed application. It has no distributed lease, destination fencing, or cross-host coordination.
 - No generic exactly-once guarantee is possible here. The observable fixture's lookup is synchronous and reference matching is simple. Production reconciliation needs domain-specific evidence, uniqueness, authorization, and visibility assumptions.
 - An empty lookup is deliberately not treated as permission to retry. This trades completion for an honest unresolved outcome. Human review is an explicit state, not an implemented approval interface.
 - The retry permission comes from the fixture's explicit `committed: false` contract. A generic HTTP 503 must never be interpreted this way without such a guarantee.
-- No delayed-visibility scheduler, automatic compensating action, secret management, authentication, or browser profile recovery is implemented. Lookup failures abstain rather than retry side effects.
+- The fixture now supports delayed visibility via an explicit pending contract and a controllable clock in tests. This contract does not generalize to arbitrary portals. No automatic compensating action, secret management, authentication, or browser profile recovery is implemented. Lookup failures abstain rather than retry side effects.
 - Receipts use one reference and amount; timestamps alone, screenshots alone, and an LLM's claim of success would not be sufficient evidence.
 - Keep the journal and destination storage on durable disks for any persistent use. The demo intentionally uses disposable storage.
 - A future Playwright/Steel adapter must perform submission and reconciliation through an actual UI, preserve session evidence, handle expired authentication, and separately report browser-level test results. HTTP tests cannot establish those properties.
@@ -100,7 +110,14 @@ Primary sources consulted on 2026-10-29:
 - `checkpoint/engine.py`: SQLite intent journal, HTTP client, bounded runner and reconciliation.
 - `checkpoint/fixture.py`: merchant fixture with controlled faults and destination modes.
 - `checkpoint/__main__.py`: twelve-case executable comparison.
-- `tests/test_recovery.py`: meaningful failure, ambiguity, and process-restart tests.
+- `tests/test_recovery.py`: the original failure, ambiguity, and process-restart tests.
+- `tests/test_next_milestone.py`: destination binding, pending evidence, ownership contention/process death, malformed upstream responses, interrupted schema migration, and HTTP portal contract tests (including invalid Unicode rejection).
 - `.github/workflows/ci.yml`: Python tests and demo; read-only repository permissions.
 
 All code is standard-library Python. No proprietary source or user data is included.
+
+## Next milestone verification
+
+The added tests verify delayed evidence through multiple fresh runner instances without additional submissions; exhaustion preserves an unresolved outcome; a later matching receipt can resolve it. A spawned owner blocks a second process, and abrupt owner death releases the OS lock. Response objects, arrays, nulls, boolean numeric fields, and contradictory pending/record payloads are handled without inventing a successful outcome. The portal tests fetch its HTML, submit over real loopback HTTP, and check visible state; **they do not execute JavaScript in a browser**.
+
+The next integration step is a Playwright adapter that drives this portal through its actual form and lookup controls, then an optional Steel session provider. Those results must be reported separately from these HTTP tests. The portal is deliberately loopback-only and unauthenticated, without production server protections; do not expose it to a public network.
