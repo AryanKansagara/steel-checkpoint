@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-10-31",
+  "environment": {
+    "python": "3.12.14",
+    "platform": "Linux"
+  },
+  "scope": "real loopback HTTP; controlled clock; fictional invoice; not browser validation",
+  "observations": [
+    {
+      "fixture_elapsed_seconds": 0,
+      "state": "pending",
+      "attempts": 1,
+      "pending_polls": 1
+    },
+    {
+      "fixture_elapsed_seconds": 5,
+      "state": "pending",
+      "attempts": 1,
+      "pending_polls": 2
+    },
+    {
+      "fixture_elapsed_seconds": 11,
+      "state": "verified",
+      "attempts": 1,
+      "pending_polls": 2
+    }
+  ],
+  "final_records": 1,
+  "duplicates": 0,
+  "test_suite": {
+    "passed": 23,
+    "original_tests_retained": 10
+  },
+  "limits": [
+    "Single-host POSIX lock, not distributed fencing",
+    "Pending signal is a fixture-specific contract",
+    "No browser JavaScript or Steel cloud validation"
+  ]
+}
