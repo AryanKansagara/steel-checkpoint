@@ -10,6 +10,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
       - run: python -m checkpoint demo
-
+      - run: npm run smoke
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t checkpoint-lab .
+      - name: Start nonroot image with bounded temporary storage
+        run: docker run -d --name checkpoint --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --memory 256m --cpus 1 -p 3000:3000 checkpoint-lab
+      - name: Wait for readiness and verify real API comparison
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/ready; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3000/api/ready
+          curl --fail --silent -H 'Content-Type: application/json' -d '{"mode":"observable","fault":"after_commit","visibilityDelayMs":40}' http://127.0.0.1:3000/api/run > /tmp/checkpoint-result.json
+          python3 -c "import json; r=json.load(open('/tmp/checkpoint-result.json')); assert r['naive']['duplicates']==1 and r['reconcile']['duplicates']==0 and r['reconcile']['state']=='verified'"
+          test "$(docker inspect --format '{{.Config.User}}' checkpoint)" = node
+      - name: Container diagnostics and cleanup
+        if: always()
+        run: |
+          docker logs checkpoint || true
+          docker rm -f checkpoint || true
