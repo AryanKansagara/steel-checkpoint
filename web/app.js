@@ -1,5 +1,9 @@
-import { validateRun, presentation, settingsLabel, exportName } from './view-model.js';
+import { validateRun, presentation, settingsLabel, exportName, createThemeController } from './view-model.js';
 const byId = id => document.getElementById(id);
+let themeStorage = null;
+try { themeStorage = window.localStorage; } catch {}
+const theme = createThemeController({root:document.documentElement, button:byId('theme-toggle'), systemButton:byId('theme-system'), status:byId('theme-status'), meta:document.querySelector('meta[name="theme-color"]'), media:window.matchMedia('(prefers-color-scheme: dark)'), storage:themeStorage});
+window.addEventListener('storage', event => { if (event.key === 'checkpoint-theme' || event.key === null) theme.sync(); });
 const form = byId('scenario-form');
 const results = byId('results');
 const runButton = byId('run-button');

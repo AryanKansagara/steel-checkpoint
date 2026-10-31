@@ -30,3 +30,35 @@ export function settingsLabel(settings) {
   return `${modes[settings.mode]} · ${faults[settings.fault]} · ${settings.visibilityDelayMs} ms visibility delay`;
 }
 export function exportName(id) { return `checkpoint-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80)}.json`; }
+
+
+/** Theme state is independent of run state; blocked storage never blocks recovery. */
+export const themePreference = value => value === 'light' || value === 'dark' ? value : null;
+export const resolveTheme = (preference, systemDark) => themePreference(preference) || (systemDark ? 'dark' : 'light');
+export function createThemeController({root, button, systemButton, status, meta, media, storage}) {
+  const read = () => { try { return themePreference(storage?.getItem('checkpoint-theme')); } catch { return null; } };
+  let preference = read();
+  function render(announce = false) {
+    const current = resolveTheme(preference, media.matches);
+    root.dataset.theme = current;
+    button.hidden = false;
+    button.textContent = current === 'dark' ? '☾ Dark' : '☀ Light';
+    button.setAttribute('aria-pressed', String(current === 'dark'));
+    button.setAttribute('title', `Switch to ${current === 'dark' ? 'light' : 'dark'} theme`);
+    systemButton.hidden = preference === null;
+    meta?.setAttribute('content', current === 'dark' ? '#181d18' : '#f5f3ed');
+    if (announce) status.textContent = `${current === 'dark' ? 'Dark' : 'Light'} theme. ${preference === null ? 'Following system preference.' : 'Personal preference selected.'}`;
+  }
+  function setPreference(value) {
+    preference = themePreference(value);
+    try { if (preference === null) storage?.removeItem('checkpoint-theme'); else storage?.setItem('checkpoint-theme', preference); } catch {}
+    render(true);
+  }
+  button.addEventListener('click', () => setPreference(resolveTheme(preference, media.matches) === 'dark' ? 'light' : 'dark'));
+  systemButton.addEventListener('click', () => setPreference(null));
+  const change = () => { if (preference === null) render(true); };
+  if (media.addEventListener) media.addEventListener('change', change);
+  else media.addListener?.(change);
+  render();
+  return {setPreference, sync() { preference = read(); render(true); }};
+}
