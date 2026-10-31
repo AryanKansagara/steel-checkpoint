@@ -7,4 +7,4 @@ await mkdir(resolve(root, 'dist'));
 for (const name of ['index.html', 'styles.css', 'app.js', 'view-model.js']) {
   await copyFile(resolve(root, 'web', name), resolve(root, 'dist', name));
 }
-console.log('Built static frontend; API requires configured BACKEND_ORIGIN.');
+console.log('Built static frontend; private product API uses the native JSON relay.');

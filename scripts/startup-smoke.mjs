@@ -1,8 +1,3 @@
-import {createService} from '../server.mjs';
-const service=await createService();try{
- const address=await service.listen(0,'127.0.0.1'),url=`http://127.0.0.1:${address.port}`;
- if(!(await fetch(url+'/api/ready')).ok)throw Error('readiness failed');
- const response=await fetch(url+'/api/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'observable',fault:'after_commit',visibilityDelayMs:40})});
- const result=await response.json();if(!response.ok||result.naive.duplicates!==1||result.reconcile.duplicates!==0||result.reconcile.state!=='verified')throw Error('comparison smoke failed');
- console.log(JSON.stringify({status:'pass',naiveDuplicates:result.naive.duplicates,reconcileDuplicates:result.reconcile.duplicates,provenance:result.summary.provenance}));
-}finally{await service.close();}
+import {createProductService} from '../product/service.mjs';import {mkdtemp,rm} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';
+const directory=await mkdtemp(join(tmpdir(),'checkpoint-startup-')),service=await createProductService({dataDir:directory});
+try{const address=await service.listen(0,'127.0.0.1'),url=`http://127.0.0.1:${address.port}`;if(!(await fetch(url+'/api/ready')).ok)throw Error('readiness failed');const created=await(await fetch(url+'/api/workspaces',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).json();const response=await fetch(url+'/api/deliveries',{method:'POST',headers:{authorization:'Bearer '+created.token,'content-type':'application/json'},body:JSON.stringify({destination:'https://example.org/webhook',reference:'startup-smoke',payload:{startup:true}})});const {delivery}=await response.json();if(!response.ok||delivery.state!=='queued'||delivery.attempts.length)throw Error('durable intent smoke failed');const exported=await(await fetch(url+'/api/export',{headers:{authorization:'Bearer '+created.token}})).json();if(exported.deliveries.length!==1||JSON.stringify(exported).includes(created.token))throw Error('private export failed');console.log(JSON.stringify({status:'pass',intent:'durably queued',networkPosts:0,privateHistory:true}));}finally{await service.close();await rm(directory,{recursive:true,force:true});}
