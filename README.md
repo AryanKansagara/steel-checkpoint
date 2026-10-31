@@ -4,9 +4,11 @@
 
 This is an independent portfolio research prototype inspired by browser-agent reliability problems. **It is not affiliated with Steel, has no Steel integration yet, and does not claim browser recovery validation.** All demonstrated actions use a controlled local HTTP merchant with fictional invoices. No real billing or account access occurs.
 
-## Current milestone: destination-bound, owned recovery
+## Current milestone: runnable same-origin recovery service
 
-The next core milestone adds immutable journal-to-destination binding, single-host process ownership, explicit delayed-evidence polling, strict HTTP response-shape checks, and a browser-facing synthetic invoice portal. **26 local tests pass** at this milestone, including the original ten recovery scenarios. Browser interaction and Steel cloud integration are still unverified. The portal is HTTP-tested, not browser-tested.
+Run `npm run dev` with Node.js 22+ and Python 3.11+ to open the interactive comparison on port 3000. The service executes the actual loopback HTTP/SQLite recovery experiment for each request, using independent merchants and journals for the naive baseline and reconciliation. The browser-facing interface displays actual journal traces, pending polling and labeled evaluation-oracle counts. It does not automate a browser or call Steel.
+
+The underlying destination binding, crash-atomic migration and single-host ownership checks remain intact. The service adds bounded worker isolation, strict JSON requests, capacity/rate limits, cleanup after disconnect/timeout, safe same-origin assets and graceful shutdown. Run `npm test` and `npm run smoke`; see [deployment.md](deployment.md) for exact API, runtime/container setup and operational limits. Local verification passes 26 existing Python tests plus 16 HTTP/lifecycle tests and nine frontend evidence tests. Docker/hosted deployment and Steel integration remain unverified.
 
 ## Run
 
@@ -22,7 +24,7 @@ The demo starts ephemeral localhost HTTP services, creates temporary SQLite stor
 
 ```sh
 docker build -t checkpoint-lab .
-docker run --rm checkpoint-lab
+docker run --rm -p 3000:3000 checkpoint-lab
 ```
 
 ## What happens
@@ -32,7 +34,7 @@ docker run --rm checkpoint-lab
 3. A fixture-specific explicit rejection before commit authorizes one retry.
 4. A missing acknowledgement enters reconciliation. One matching durable receipt verifies success without resubmission.
 5. Missing lookup capability, an ordinary empty search, duplicate matches, or conflicting evidence enters `needs_review` without resubmitting.
-6. A destination-specific explicit `pending` response can keep the intent `pending` while delayed evidence becomes visible. Each `run` performs at most one lookup. Its persisted pending count reaches `needs_review` at the configured budget; no background polling or side-effect retry is scheduled. A later explicit lookup can still verify a unique receipt.
+6. A destination-specific explicit `pending` response can keep the intent `pending` while delayed evidence becomes visible. Each `run` performs at most one lookup. Its persisted pending count reaches `needs_review` at the configured budget; the core Runner schedules no background polling or side-effect retry. The web worker calls explicit reconciliation in a bounded loop when the destination reports pending evidence. A later explicit lookup can still verify a unique receipt.
 7. Restarting against an `executing` journal entry reconciles first. A test kills a real child process after submission and recovers from the persisted journal in the parent.
 
 ```mermaid

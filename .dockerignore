@@ -1,0 +1,16 @@
+.git
+.github
+__pycache__
+**/__pycache__
+*.pyc
+node_modules
+.checkpoint-state
+*.sqlite
+*.sqlite-*
+*.lock
+benchmarks
+tests
+web/*.test.js
+*.log
+.env
+.env.*

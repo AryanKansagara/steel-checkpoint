@@ -8,3 +8,9 @@ dist/
 
 .checkpoint-state/
 *.sqlite.lock
+
+node_modules/
+*.log
+.env
+.env.*
+!.env.example

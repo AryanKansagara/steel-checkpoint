@@ -1,0 +1,13 @@
+{
+  "name": "checkpoint-recovery-lab",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "python3 -m unittest discover -s tests -v && node --test tests/service.test.mjs web/view-model.test.js",
+    "smoke": "node scripts/startup-smoke.mjs"
+  }
+}
