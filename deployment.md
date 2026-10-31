@@ -36,7 +36,7 @@ Body receipt is limited to two seconds, worker execution to six seconds, followe
 
 Node creates and owns each job directory and passes it as `CHECKPOINT_RUN_DIR` and `TMPDIR`; Python creates nested temporary stores there. After process exit, including hard termination, Node recursively removes that entire directory. Worker SIGTERM unwinds its own merchant/thread/file contexts first when possible. The parent signals the child's process group and escalates to SIGKILL if needed. HTTP tests verify timeout/disconnect process death and absence of leftover job directories.
 
-SIGTERM/SIGINT stop admissions and close the listener. Existing work can finish; after seven seconds active jobs are aborted and remaining HTTP connections closed. Concurrent shutdown callers await one shared shutdown promise. Health is a liveness response; readiness also verifies the Python modules and presence of the frontend entrypoint. No CORS policy grants another origin access. The service uses self-only script/style CSP, safe text JSON errors and static traversal/symlink confinement.
+SIGTERM/SIGINT stop admissions and close the listener. Existing work can finish; after seven seconds active jobs are aborted and remaining HTTP connections closed. Concurrent shutdown callers await one shared shutdown promise. Health is a liveness response; readiness also verifies the Python modules and presence of the frontend entrypoint. By default only a browser origin matching the actual socket scheme and Host is accepted; clients without an Origin header remain supported. An optional exact `PUBLIC_ORIGIN` allows the separate frontend described below. The service uses self-only script/style CSP, safe text JSON errors and static traversal/symlink confinement.
 
 ## Container
 
@@ -47,10 +47,26 @@ docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m --memory 256m
 
 The image pins official Node `24.22.2-bookworm-slim`, installs Debian's maintained Python 3 package, runs as the unprivileged `node` user, exposes a readiness healthcheck and uses an exec-form Node entrypoint. Python apt resolution is not pinned, so builds are not bit-for-bit reproducible; production release processes should record image digests and package inventory. Container limits bound total temporary storage and process memory. TLS, public ingress limits, process supervision and access policy belong to the hosting environment; this synthetic demo itself has no authentication or real merchant credentials.
 
-Docker is unavailable in the authoring environment. The Dockerfile has **not** been built locally. The prepared GitHub Actions job builds it, starts it with a read-only root and bounded `/tmp`, checks health and performs a real API comparison; that hosted check remains unverified until the workflow runs. A passing local Node/Python smoke does not establish container or hosting behavior.
+Docker is unavailable in the authoring environment. The Dockerfile has **not** been built locally. The GitHub Actions job builds it, starts it with a read-only root and bounded `/tmp`, checks health and performs a real API comparison. That container smoke passed for published commit `2335d78815800a6d8a07af11ba1caccba963f035` ([run](https://github.com/AryanKansagara/steel-checkpoint/actions/runs/41245773813)); subsequent source changes require a fresh run. A passing local Node/Python smoke does not establish container or hosting behavior.
+
+## Split hosting: Vercel frontend and Railway backend
+
+`railway.json` selects the repository Dockerfile, `/api/ready` healthcheck, one replica, bounded failure restarts, zero overlap and ten seconds of shutdown drain. Deploy the **repository root** to Railway, keep the Docker entrypoint, let the platform provide `PORT`, and configure one region/one replica. The per-process two-worker/20-run budget is not a distributed quota; avoid extra replicas or a multi-region dashboard override. No persistent volume is required because all experiment data is disposable. Railway health checks use no browser Origin and work before the frontend hostname exists.
+
+Once the actual Railway HTTPS domain is provisioned, configure Vercel's `BACKEND_ORIGIN` to that exact canonical origin, without a trailing slash. The root `vercel.ts` requires it and fails instead of substituting an invented backend URL. Vercel runs `scripts/build-frontend.mjs` to copy the explicit frontend asset allowlist into `dist`; API and health traffic is rewritten to the configured backend. There is no Python worker in a Vercel function. Keep the Vercel project root at this repository root so the programmatic configuration is used.
+
+Once the actual Vercel/custom frontend hostname is known, set Railway's `PUBLIC_ORIGIN` to its exact HTTPS origin and redeploy the backend. Do not use `*`, preview-domain patterns, a comma-separated list, HTTP, credentials, a path, trailing slash, query or fragment. For example syntax, see the commented setting in `.env.example`; it is not a configured live address. Preview deployments with different hostnames require an explicit deliberate origin change; subdomains do not inherit permission.
+
+The backend validates this setting at startup and only grants API CORS access to that exact origin or a direct same-connection origin. Preflight permits only POST `/api/run` with Content-Type; no credentialed CORS or wildcard reflection is enabled. Disallowed origins/methods/headers return 403 before consuming worker/rate capacity. Forwarded and X-Forwarded-* headers never establish origin trust. CORS is a browser boundary, not authentication: no-Origin CLI clients can still use this bounded fictional demo.
+
+Railway terminates TLS before the plain HTTP Node listener. A browser opening the backend domain's own HTTPS UI is therefore **not** automatically treated as a verified same-connection origin; that direct HTTPS UI path is not a configured supported frontend until separately validated. The intended public browser path is Vercel's explicitly allowed origin. Local HTTP same-origin use is preserved. Never weaken this check by trusting arbitrary forwarding headers.
+
+After both real domains exist, verify the deployed Vercel page, rewritten readiness, a real default comparison, opaque abstention, idempotent control, delayed evidence, theme persistence and report download. Confirm rejected near-match origins and 429 behavior separately. No live Vercel or Railway deployment has been established by these configuration files.
 
 ## References
 
 - [Official Node image catalog](https://hub.docker.com/_/node): versioned bookworm slim image tags, checked 2026-10-31.
 - [Official Node image source](https://github.com/nodejs/docker-node): image runtime and nonroot user conventions.
+- [Vercel programmatic configuration](https://vercel.com/docs/project-configuration/vercel-ts): named config export and build-time environment routing.
+- [Railway configuration reference](https://docs.railway.com/config-as-code/reference) and [current schema](https://railway.com/railway.schema.json): Docker builder, healthcheck and single-replica settings checked 2026-10-31.
 - [Dockerfile reference](https://docs.docker.com/reference/dockerfile/): `USER`, exec `CMD`, `HEALTHCHECK` and shutdown instructions.

@@ -14,6 +14,26 @@ const security={
  'cache-control':'no-store',
 };
 export class RequestError extends Error {constructor(status,message){super(message);this.status=status;}}
+/** Optional deployment setting: one exact serialized HTTPS origin, never a pattern. */
+export function publicOriginSetting(value){
+ if(value===undefined)return null;
+ if(typeof value!=='string'||!value||value.includes('*'))throw Error('PUBLIC_ORIGIN must be one exact HTTPS origin');
+ let url;try{url=new URL(value);}catch{throw Error('PUBLIC_ORIGIN must be one exact HTTPS origin');}
+ if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.origin!==value)throw Error('PUBLIC_ORIGIN must be a canonical HTTPS origin without path, credentials, query or fragment');
+ return value;
+}
+function apiOrigin(request,configured){
+ const supplied=request.headers.origin;
+ if(supplied===undefined)return null; // Non-browser health checks and CLI clients are supported.
+ let parsed;try{parsed=new URL(supplied);}catch{throw new RequestError(403,'Origin is not allowed');}
+ if(!['http:','https:'].includes(parsed.protocol)||parsed.origin!==supplied||parsed.username||parsed.password)throw new RequestError(403,'Origin is not allowed');
+ const protocol=request.socket.encrypted?'https:':'http:';
+ let direct;try{direct=new URL(protocol+'//'+request.headers.host).origin;}catch{throw new RequestError(403,'Origin is not allowed');}
+ // TLS termination cannot be inferred from untrusted Forwarded/X-Forwarded-* headers.
+ if(supplied!==configured&&supplied!==direct)throw new RequestError(403,'Origin is not allowed');
+ return supplied;
+}
+
 /** Flat JSON schema parser rejects duplicate keys, even escaped equivalent keys. */
 export function parseConfig(raw) {
  try{JSON.parse(raw);}catch{throw new RequestError(400,'Invalid JSON configuration');}
@@ -77,7 +97,8 @@ export async function runWorker(config,{signal,timeoutMs=6000,onSpawn=()=>{},spa
   });
  }finally{clearTimeout(killTimer);await rm(directory,{recursive:true,force:true});}
 }
-export async function createService({webRoot=join(ROOT,'web'),capacity=2,rateLimit=20,rateWindowMs=60000,worker=runWorker}={}) {
+export async function createService({webRoot=join(ROOT,'web'),capacity=2,rateLimit=20,rateWindowMs=60000,worker=runWorker,publicOrigin=process.env.PUBLIC_ORIGIN}={}) {
+ const configuredOrigin=publicOriginSetting(publicOrigin);
  if(!Number.isInteger(capacity)||capacity<1||capacity>2||!Number.isInteger(rateLimit)||rateLimit<1||!Number.isFinite(rateWindowMs)||rateWindowMs<=0)throw Error('invalid service limits');
  let closing=false,ready=false;const active=new Set(),children=new Set(),jobs=new Set(),starts=[];
  // Readiness checks the fixed Python executable and existing recovery modules.
@@ -89,7 +110,19 @@ export async function createService({webRoot=join(ROOT,'web'),capacity=2,rateLim
  const server=http.createServer({maxHeaderSize:8192},async(request,response)=>{
   response.on('error',()=>{});
   try {
-   const raw=request.url??'/';const pathOnly=raw.split('?')[0];
+   const raw=request.url??'/';const requestedPath=raw.split('?')[0];const pathOnly=requestedPath==='/healthz'?'/api/health':requestedPath==='/readyz'?'/api/ready':requestedPath;
+   if(pathOnly.startsWith('/api/')){
+    const allowedOrigin=apiOrigin(request,configuredOrigin);
+    response.setHeader('vary','Origin');
+    if(allowedOrigin){response.setHeader('access-control-allow-origin',allowedOrigin);response.setHeader('access-control-expose-headers','Retry-After');}
+    if(request.method==='OPTIONS'){
+     const requested=request.headers['access-control-request-headers'];
+     const headers=requested===undefined?[]:requested.split(',').map(h=>h.trim().toLowerCase());
+     if(pathOnly!=='/api/run'||!allowedOrigin||request.headers['access-control-request-method']!=='POST'||headers.some(h=>h!=='content-type')||new Set(headers).size!==headers.length)return json(response,403,{error:'Preflight is not allowed'});
+     response.writeHead(204,{...security,'access-control-allow-methods':'POST','access-control-allow-headers':'Content-Type','vary':'Origin, Access-Control-Request-Method, Access-Control-Request-Headers'});response.end();return;
+    }
+   }
+
    if(pathOnly==='/api/health'&&request.method==='GET')return json(response,200,{status:'ok',service:'checkpoint'});
    if(pathOnly==='/api/ready'&&request.method==='GET'){const frontendReady=await stat(join(webRoot,'index.html')).then(file=>file.isFile()).catch(()=>false);return json(response,ready&&!closing&&frontendReady?200:503,{ready:ready&&!closing&&frontendReady,checks:{python:ready,frontend:frontendReady},active:active.size,capacity});}
    if(pathOnly==='/api/run'){
