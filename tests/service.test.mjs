@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {mkdtemp,writeFile,rm,mkdir,readdir,symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {createService,parseConfig,runWorker,startOptions,publicOriginSetting} from '../server.mjs';
+import {createService,parseConfig,runWorker,startOptions,publicOriginSetting} from '../lab-server.mjs';
 const config={mode:'observable',fault:'after_commit',visibilityDelayMs:0};
 async function fixture(t,options={}){
  const directory=await mkdtemp(join(tmpdir(),'checkpoint-http-test-')),web=join(directory,'web');await mkdir(web);await writeFile(join(web,'index.html'),'<!doctype html><h1>test fixture</h1>');await writeFile(join(web,'app.js'),'export const ready=true;');
@@ -95,7 +95,7 @@ test('dev startup honors preview host/port flags over PORT and stops on SIGTERM'
  assert.deepEqual(startOptions(['--host','127.0.0.1','--port','4173','--strictPort'],{PORT:'4321'}),{host:'127.0.0.1',port:4173});
  assert.throws(()=>startOptions(['--port','0']));assert.throws(()=>startOptions(['--host','example.com']));
  const probe=http.createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));
- const child=spawn(process.execPath,[fileURLToPath(new URL('../server.mjs',import.meta.url)),'--host','127.0.0.1','--port',String(port),'--strictPort'],{env:{...process.env,PORT:'1'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../lab-server.mjs',import.meta.url)),'--host','127.0.0.1','--port',String(port),'--strictPort'],{env:{...process.env,PORT:'1'},stdio:['ignore','pipe','pipe']});
  try{
   await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('dev startup timed out')),3000);child.stdout.on('data',data=>{output+=data;if(output.includes('listening on 127.0.0.1:'+port)){clearTimeout(timer);resolve();}});child.once('error',reject);child.once('exit',code=>{clearTimeout(timer);reject(Error('dev exited '+code));});});
   assert.equal((await fetch(`http://127.0.0.1:${port}/api/ready`)).status,200);
