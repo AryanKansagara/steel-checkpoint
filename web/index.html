@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f3ed"><title>Checkpoint — Recovery desk</title>
+  <link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#workspace">Skip to recovery desk</a>
+<header class="topbar"><a class="brand" href="/" aria-label="Checkpoint home"><span class="brand-mark" aria-hidden="true">⌘</span>checkpoint<span class="brand-period">.</span></a><div class="top-meta"><span class="environment"><i aria-hidden="true"></i> Local fixture</span><span class="edition">RECOVERY LAB / 01</span></div></header>
+<main id="workspace">
+  <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow">AUTOMATION, WITH A MEMORY</p><h1>Did it happen?<br><span>Know before you retry.</span></h1><p class="intro-copy">A lost acknowledgement is not a failed action. Put blind retries and evidence-led recovery through the same interruption.</p></div><div class="intro-note"><span class="note-symbol" aria-hidden="true">↳</span><p>One intent.<br>Two recovery policies.<br><strong>A visible difference.</strong></p></div></section>
+  <p class="scope"><span aria-hidden="true">◈</span> Synthetic invoice fixture over local HTTP and SQLite. No real invoices, payments, or Steel/browser integration.</p>
+  <div class="desk-layout">
+    <aside class="setup" aria-labelledby="setup-title"><div class="section-heading"><span class="section-index">01</span><h2 id="setup-title">Set the conditions</h2></div>
+      <div class="invoice"><div class="invoice-top"><span class="document-symbol" aria-hidden="true">▤</span><span>FICTIONAL INTENT</span><span class="paper-dot" aria-hidden="true"></span></div><p class="invoice-title">Create an invoice</p><p class="invoice-recipient">Northstar Studio <span>· demo recipient</span></p><div class="invoice-total"><span>Amount</span><strong>1,250 <small>minor units</small></strong></div><div class="invoice-bottom"><span>One intended record</span><span aria-hidden="true">↗</span></div></div>
+      <form id="scenario-form">
+        <fieldset><legend>Destination capability</legend><div class="mode-options">
+          <label class="mode-option"><input type="radio" name="mode" value="observable" checked><span><strong>Observable</strong><small>Look up a matching receipt</small></span><span class="radio-dot" aria-hidden="true"></span></label>
+          <label class="mode-option"><input type="radio" name="mode" value="opaque"><span><strong>Opaque</strong><small>No lookup to resolve uncertainty</small></span><span class="radio-dot" aria-hidden="true"></span></label>
+          <label class="mode-option"><input type="radio" name="mode" value="idempotent"><span><strong>Idempotent</strong><small>Destination deduplicates references</small></span><span class="radio-dot" aria-hidden="true"></span></label>
+        </div></fieldset>
+        <div class="field"><label for="fault">Interruption timing</label><select id="fault" name="fault" aria-describedby="fault-help"><option value="after_commit">After commit · acknowledgement lost</option><option value="before_commit">Before commit · explicit rejection</option><option value="none">None · clean acknowledgement</option></select><p class="field-help" id="fault-help">The record is committed, but its acknowledgement never arrives.</p></div>
+        <div class="field"><div class="range-label"><label for="delay">Receipt visibility delay</label><output id="delay-value" for="delay">0 ms</output></div><input id="delay" name="visibilityDelayMs" type="range" min="0" max="300" step="25" value="0" aria-describedby="delay-help"><p class="field-help" id="delay-help">Delayed evidence can require bounded polling or human review.</p></div>
+        <button class="run-button" id="run-button" type="submit"><span class="run-symbol" aria-hidden="true">↗</span><span id="run-label">Run both policies</span><span class="button-key" aria-hidden="true">↵</span></button>
+      </form><p class="setup-footnote">Each run uses isolated fixture stores.<br>Both policies receive the same scenario.</p>
+    </aside>
+    <section class="results" aria-labelledby="results-title" aria-busy="false" id="results">
+      <div class="section-heading result-heading"><span class="section-index">02</span><h2 id="results-title" tabindex="-1">Compare the outcomes</h2><span class="run-badge" id="run-badge">NOT RUN</span></div>
+      <div class="status-line" id="status" role="status" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="status-message">Your recovery desk is ready. Choose a scenario and run the experiment.</span></div>
+      <p class="run-context" id="run-context">Actual engine results will appear below.</p>
+      <div class="outcome-grid">
+        <article class="outcome naive" aria-labelledby="naive-title"><div class="policy-header"><span class="policy-icon" aria-hidden="true">↻</span><div><p class="policy-kicker">POLICY A</p><h3 id="naive-title">Naive retry</h3></div><span class="policy-state empty" id="naive-state">Awaiting run</span></div><p class="policy-description">No acknowledgement? Submit again.</p><div class="metrics" id="naive-metrics"><div><strong id="naive-attempts">—</strong><span>Attempts</span></div><div><strong id="naive-records">—</strong><span>Oracle records</span></div><div><strong id="naive-duplicates">—</strong><span>Duplicates</span></div></div><p class="outcome-note" id="naive-note">A successful retry can hide a duplicate side effect.</p><details class="receipt"><summary>Validated receipt <span id="naive-receipt-tag">not available</span></summary><pre id="naive-receipt">Run a scenario to inspect returned receipt evidence.</pre></details></article>
+        <article class="outcome reconcile" aria-labelledby="reconcile-title"><div class="policy-header"><span class="policy-icon" aria-hidden="true">✓</span><div><p class="policy-kicker">POLICY B</p><h3 id="reconcile-title">Reconcile first</h3></div><span class="policy-state empty" id="reconcile-state">Awaiting run</span></div><p class="policy-description">Persist intent. Check evidence. Then decide.</p><div class="metrics"><div><strong id="reconcile-attempts">—</strong><span>Attempts</span></div><div><strong id="reconcile-records">—</strong><span>Oracle records</span></div><div><strong id="reconcile-duplicates">—</strong><span>Duplicates</span></div></div><p class="outcome-note" id="reconcile-note">Uncertainty stays visible instead of becoming another submission.</p><details class="receipt"><summary>Validated receipt <span id="reconcile-receipt-tag">not available</span></summary><pre id="reconcile-receipt">Run a scenario to inspect returned receipt evidence.</pre></details></article>
+      </div>
+      <div class="evidence-note"><span aria-hidden="true">ⓘ</span><p><strong>Knowledge and ground truth are different.</strong> State is what a policy knows. Record and duplicate counts come from the fixture’s post-run oracle; the recovery policy cannot use that privileged view.</p></div>
+      <section class="journal" aria-labelledby="journal-title"><div class="journal-top"><div><p class="policy-kicker">THE REASON BEHIND THE RESULT</p><h3 id="journal-title">Recovery journal</h3></div><div class="journal-controls" role="group" aria-label="Journal policy"><button type="button" class="journal-tab" data-policy="naive" aria-pressed="false">Naive</button><button type="button" class="journal-tab" data-policy="reconcile" aria-pressed="true">Reconcile</button></div></div><div class="journal-empty" id="journal-empty"><span aria-hidden="true">⌁</span><p>No events yet</p><small>Run the experiment to follow each decision.</small></div><ol id="timeline" class="timeline" aria-label="Policy state transitions" hidden></ol><details class="raw-journal"><summary>Inspect complete run JSON</summary><pre id="raw-json">No run has been recorded.</pre></details></section>
+      <div class="result-footer"><span id="summary-text">Receipts, transitions, and counts are returned by the local engine.</span><button type="button" id="download" class="download-button" disabled><span aria-hidden="true">↓</span> Export run JSON</button></div>
+    </section>
+  </div>
+</main>
+<footer class="page-footer"><span><b>checkpoint.</b> Evidence before repetition.</span><span>Independent prototype · bounded recovery, no exactly-once guarantee</span></footer>
+</body>
+</html>
