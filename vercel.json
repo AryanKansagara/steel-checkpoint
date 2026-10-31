@@ -5,10 +5,6 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://checkpoint-production-81f4.up.railway.app/api/:path*"
-    },
-    {
       "source": "/healthz",
       "destination": "https://checkpoint-production-81f4.up.railway.app/healthz"
     },
