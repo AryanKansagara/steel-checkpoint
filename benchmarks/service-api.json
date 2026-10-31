@@ -1,0 +1,171 @@
+{
+  "runId": "aea97956-15ab-464d-bbdf-8c2ff6d99b02",
+  "mode": "observable",
+  "fault": "after_commit",
+  "visibilityDelayMs": 100,
+  "naive": {
+    "policy": "naive_retry",
+    "state": "verified",
+    "attempts": 2,
+    "records": 2,
+    "duplicates": 1,
+    "events": [
+      {
+        "id": 1,
+        "state": "executing",
+        "reason": "Naive baseline persists intent then submits",
+        "timestamp": 1793483067.9717345
+      },
+      {
+        "id": 2,
+        "state": "outcome_unknown",
+        "reason": "Naive baseline blindly retries after missing or rejected acknowledgement",
+        "timestamp": 1793483067.9788542
+      },
+      {
+        "id": 3,
+        "state": "executing",
+        "reason": "Naive baseline persists intent then submits",
+        "timestamp": 1793483067.982251
+      },
+      {
+        "id": 4,
+        "state": "verified",
+        "reason": "Naive baseline accepts matching acknowledgement",
+        "timestamp": 1793483067.9873054
+      }
+    ],
+    "history": [
+      {
+        "state": "outcome_unknown",
+        "attempts": 1,
+        "pendingPolls": 0,
+        "elapsedMs": 30.432
+      },
+      {
+        "state": "verified",
+        "attempts": 2,
+        "pendingPolls": 0,
+        "elapsedMs": 39.02
+      }
+    ],
+    "receipt": {
+      "id": 2,
+      "reference": "fictional-invoice",
+      "amount": 1250
+    },
+    "elapsedMs": 43.851
+  },
+  "reconcile": {
+    "policy": "reconcile",
+    "state": "verified",
+    "attempts": 1,
+    "records": 1,
+    "duplicates": 0,
+    "events": [
+      {
+        "id": 1,
+        "state": "executing",
+        "reason": "Intent committed before external submit",
+        "timestamp": 1793483068.0109053
+      },
+      {
+        "id": 2,
+        "state": "outcome_unknown",
+        "reason": "Submit acknowledgement lost or indeterminate",
+        "timestamp": 1793483068.0157895
+      },
+      {
+        "id": 3,
+        "state": "reconciling",
+        "reason": "Looking up durable destination evidence",
+        "timestamp": 1793483068.0181453
+      },
+      {
+        "id": 4,
+        "state": "pending",
+        "reason": "Destination reports delayed evidence; poll later without resubmitting",
+        "timestamp": 1793483068.0215077
+      },
+      {
+        "id": 5,
+        "state": "reconciling",
+        "reason": "Looking up durable destination evidence",
+        "timestamp": 1793483068.0503483
+      },
+      {
+        "id": 6,
+        "state": "pending",
+        "reason": "Destination reports delayed evidence; poll later without resubmitting",
+        "timestamp": 1793483068.0541153
+      },
+      {
+        "id": 7,
+        "state": "reconciling",
+        "reason": "Looking up durable destination evidence",
+        "timestamp": 1793483068.0827901
+      },
+      {
+        "id": 8,
+        "state": "pending",
+        "reason": "Destination reports delayed evidence; poll later without resubmitting",
+        "timestamp": 1793483068.0860999
+      },
+      {
+        "id": 9,
+        "state": "reconciling",
+        "reason": "Looking up durable destination evidence",
+        "timestamp": 1793483068.114598
+      },
+      {
+        "id": 10,
+        "state": "verified",
+        "reason": "One matching destination receipt",
+        "timestamp": 1793483068.1184804
+      }
+    ],
+    "history": [
+      {
+        "state": "pending",
+        "attempts": 1,
+        "pendingPolls": 1,
+        "elapsedMs": 28.65
+      },
+      {
+        "state": "pending",
+        "attempts": 1,
+        "pendingPolls": 2,
+        "elapsedMs": 61.023
+      },
+      {
+        "state": "pending",
+        "attempts": 1,
+        "pendingPolls": 3,
+        "elapsedMs": 92.741
+      },
+      {
+        "state": "verified",
+        "attempts": 1,
+        "pendingPolls": 3,
+        "elapsedMs": 125.176
+      }
+    ],
+    "receipt": {
+      "id": 1,
+      "reference": "fictional-invoice",
+      "amount": 1250
+    },
+    "elapsedMs": 132.223
+  },
+  "summary": {
+    "amountMinor": 1250,
+    "naiveDuplicates": 1,
+    "reconcileDuplicates": 0,
+    "avoidedDuplicates": 1,
+    "provenance": "real loopback HTTP; authored merchant faults",
+    "oracle": "records/duplicates are evaluation-only fixture reads after each experiment; never recovery input",
+    "comparison": "independent merchants/journals; same mode, one-shot fault, amount and visibility delay",
+    "integrationStatus": "unverified",
+    "limitation": "Controlled synthetic destination only; no browser automation, Steel integration or distributed exactly-once guarantee"
+  }
+}
