@@ -1,36 +1,40 @@
-/** Pure presentation boundary: invalid evidence never becomes a success badge. */
-const STATES = new Set(['verified', 'failed', 'pending', 'needs_review']);
-const integer = value => Number.isSafeInteger(value) && value >= 0;
-export function validateRun(data) {
-  if (!data || typeof data !== 'object' || typeof data.runId !== 'string' || !data.runId || data.runId.length > 200) throw new Error('The engine returned an invalid run identifier.');
-  for (const name of ['naive', 'reconcile']) {
-    const policy = data[name];
-    if (!policy || !STATES.has(policy.state) || !['attempts', 'records', 'duplicates'].every(key => integer(policy[key]))) throw new Error('The engine returned incomplete outcome evidence.');
-    if (!Array.isArray(policy.events) || !policy.events.every(event => event && typeof event.state === 'string' && typeof event.reason === 'string')) throw new Error('The engine returned an invalid audit journal.');
-    if (policy.receipt !== null && (typeof policy.receipt !== 'object' || !policy.receipt || !integer(policy.receipt.id) || policy.receipt.id === 0 || typeof policy.receipt.reference !== 'string' || !integer(policy.receipt.amount))) throw new Error('The engine returned an invalid receipt.');
-    if (!Array.isArray(policy.history) || !policy.history.every(row => row && typeof row.state === 'string' && typeof row.elapsedMs === 'number' && Number.isFinite(row.elapsedMs) && row.elapsedMs >= 0)) throw new Error('The engine returned invalid recovery history.');
+/** Product presentation boundary. Network and business success are kept distinct. */
+const STATES = new Set(['queued','delivering','delivered','unknown','failed','needs_review']);
+export const stateLabel = state => ({queued:'Ready to send',delivering:'Sending',delivered:'HTTP acknowledged',unknown:'Outcome unknown',failed:'Failed',needs_review:'Needs review'}[state] || 'Unrecognized state');
+export function validateDelivery(value) {
+  if (!value || typeof value !== 'object' || !['id','reference','destination','createdAt','updatedAt'].every(key=>typeof value[key] === 'string') || !value.id || !STATES.has(value.state) || !Array.isArray(value.attempts) || !Array.isArray(value.events) || typeof value.canRetrySafely !== 'boolean') throw new Error('The server returned an incomplete delivery record.');
+  if (!value.events.every(event=>event && typeof event.state==='string' && typeof event.reason==='string')) throw new Error('The delivery journal is unreadable.');
+  return value;
+}
+export function actionAvailability(delivery) {
+  const active = delivery.state === 'delivering';
+  return {send:delivery.state==='queued', reconcile:!active && Boolean(delivery.lookup) && ['unknown','failed','needs_review'].includes(delivery.state), retry:!active && !['queued','delivered'].includes(delivery.state), riskRequired:delivery.canRetrySafely !== true};
+}
+export function outcomeExplanation(delivery) {
+  switch(delivery.state) {
+    case 'queued':return 'Saved, not sent. Review the destination and payload before making a real HTTP POST.';
+    case 'delivering':return 'A send is in progress or was interrupted. Do not assume that no response means no side effect.';
+    case 'delivered':return 'The destination acknowledged the HTTP request, or a receipt matched the configured lookup. This does not independently prove that the business action committed.';
+    case 'unknown':return 'No conclusive acknowledgement was received. The destination may already have acted. Look up a receipt before considering another POST.';
+    case 'needs_review':return 'The available evidence did not uniquely resolve this delivery. An empty or conflicting lookup does not authorize a safe retry.';
+    default:return 'The attempt did not establish successful delivery. Review its actual status and reason. Retry safety is determined by the server.';
   }
-  if (!data.summary || typeof data.summary !== 'object') throw new Error('The engine returned no run summary.');
-  return data;
 }
-export function presentation(policy) {
-  const label = {verified:'Verified', failed:'Failed', pending:'Pending evidence', needs_review:'Needs review'}[policy.state] || 'Unknown';
-  const tone = policy.duplicates > 0 ? 'danger' : policy.state === 'needs_review' ? 'review' : policy.state === 'pending' ? 'pending' : policy.state === 'failed' ? 'danger' : 'success';
-  let note;
-  if (policy.duplicates > 0) note = `${policy.duplicates} duplicate ${policy.duplicates === 1 ? 'record was' : 'records were'} created. A verified acknowledgement does not erase duplicate side effects.`;
-  else if (policy.state === 'needs_review') note = 'Outcome unresolved. Human review is required; the engine has not treated missing evidence as permission to resubmit.';
-  else if (policy.state === 'pending') note = 'Evidence is still pending. This result does not prove failure or authorize another submission.';
-  else if (policy.state === 'failed') note = 'The policy did not verify completion. Inspect the journal for its actual decision and evidence.';
-  else note = 'Completion verified with no duplicate records observed by the fixture oracle.';
-  return {label, tone, note};
+export function httpsURL(text, label='Destination') {
+  let url;try{url=new URL(text);}catch{throw new Error(`${label} must be a valid public HTTPS URL.`);}
+  if(url.protocol!=='https:' || url.username || url.password || url.hash)throw new Error(`${label} requires HTTPS, no embedded credentials, and no URL fragment.`);
+  return url.href;
 }
-export function settingsLabel(settings) {
-  const modes = {observable:'Observable', opaque:'Opaque', idempotent:'Idempotent'};
-  const faults = {none:'No interruption', before_commit:'Before commit', after_commit:'After commit'};
-  return `${modes[settings.mode]} · ${faults[settings.fault]} · ${settings.visibilityDelayMs} ms visibility delay`;
+export function createInput({destination,reference,payloadText,idempotencyEnabled,idempotencyHeader,idempotencyKey,lookupURL,recordsPointer,referencePointer}) {
+  let payload;try{payload=JSON.parse(payloadText);}catch{throw new Error('Enter a valid JSON payload before creating the delivery.');}
+  if(new TextEncoder().encode(JSON.stringify(payload)).length>16384)throw new Error('The JSON payload exceeds 16 KiB.');
+  if(typeof reference!=='string'||!reference.trim()||reference.trim().length>120)throw new Error('Choose a delivery reference between 1 and 120 characters.');
+  const ref=reference.trim();
+  return {destination:httpsURL(destination),reference:ref,payload,
+    idempotency:idempotencyEnabled?{header:idempotencyHeader.trim()||'Idempotency-Key',key:idempotencyKey?.trim()||ref,contract:true}:null,
+    lookup:lookupURL.trim()?{url:httpsURL(lookupURL,'Lookup'),recordsPointer:recordsPointer.trim()||'/receipts',referencePointer:referencePointer.trim()||'/reference'}:null,credential:null};
 }
-export function exportName(id) { return `checkpoint-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80)}.json`; }
-
+export function exportName(id) {return `checkpoint-${String(id).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)}.json`;}
 
 /** Theme state is independent of run state; blocked storage never blocks recovery. */
 export const themePreference = value => value === 'light' || value === 'dark' ? value : null;

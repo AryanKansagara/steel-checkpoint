@@ -1,132 +1,62 @@
-import { validateRun, presentation, settingsLabel, exportName, createThemeController } from './view-model.js';
-const byId = id => document.getElementById(id);
-let themeStorage = null;
-try { themeStorage = window.localStorage; } catch {}
-const theme = createThemeController({root:document.documentElement, button:byId('theme-toggle'), systemButton:byId('theme-system'), status:byId('theme-status'), meta:document.querySelector('meta[name="theme-color"]'), media:window.matchMedia('(prefers-color-scheme: dark)'), storage:themeStorage});
-window.addEventListener('storage', event => { if (event.key === 'checkpoint-theme' || event.key === null) theme.sync(); });
-const form = byId('scenario-form');
-const results = byId('results');
-const runButton = byId('run-button');
-const downloadButton = byId('download');
-let lastRun = null;
-let lastSettings = null;
-let selectedPolicy = 'reconcile';
-let running = false;
-let stale = false;
-
-function readSettings() {
-  return {mode:new FormData(form).get('mode'), fault:byId('fault').value, visibilityDelayMs:Number(byId('delay').value)};
+import {createThemeController,createInput,validateDelivery,stateLabel,actionAvailability,outcomeExplanation,exportName} from './view-model.js';
+const $=id=>document.getElementById(id);
+let storage=null;try{storage=window.localStorage;}catch{}
+const theme=createThemeController({root:document.documentElement,button:$('theme-toggle'),systemButton:$('theme-system'),status:$('theme-status'),meta:document.querySelector('meta[name="theme-color"]'),media:window.matchMedia('(prefers-color-scheme: dark)'),storage});
+window.addEventListener('storage',event=>{if(event.key==='checkpoint-theme'||event.key===null)theme.sync();});
+let token=null,selected=null,jobs=[],busy=false,workspaceReady=false,evidenceStale=false;
+class APIError extends Error {constructor(message,status){super(message);this.status=status;}}
+function announce(message,type=''){ $('status').className=`status-line ${type}`;$('status-message').textContent=message; }
+function loadToken(){try{return storage?.getItem('checkpoint-workspace')||null;}catch{return null;}}
+function persistToken(value){try{storage?.setItem('checkpoint-workspace',value);return Boolean(storage);}catch{return false;}}
+async function api(path,{method='GET',body,authorize=true}={}){
+  const headers={};if(body!==undefined)headers['Content-Type']='application/json';if(authorize&&token)headers.Authorization=`Bearer ${token}`;
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);
+  try{
+    const response=await fetch(path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,cache:'no-store'});
+    let data=null;if(response.status!==204){try{data=await response.json();}catch{throw new APIError('The server returned unreadable evidence. Refresh the saved job before taking another action.',response.status);}}
+    if(!response.ok){const message=typeof data?.error==='string'?data.error:typeof data?.error?.message==='string'?data.error.message:`Request could not complete (HTTP ${response.status}).`;throw new APIError(response.status===429?'The workspace is busy or its request budget is exhausted. Wait, then refresh. No automatic retry was sent.':message,response.status);}
+    return data;
+  }catch(error){if(error.name==='AbortError')throw new APIError('The request timed out. Its outcome is unknown. Refresh the saved job before considering another send.',0);if(error instanceof APIError)throw error;throw new APIError('Unable to reach the delivery service. A missing response does not prove that a send failed. No automatic retry was sent.',0);}
+  finally{clearTimeout(timer);}
 }
-function status(message, type = '') {
-  byId('status').className = `status-line ${type}`;
-  byId('status-message').textContent = message;
+function setBusy(value){busy=value;$('workspace').setAttribute('aria-busy',String(value));for(const button of document.querySelectorAll('main button'))button.disabled=value;for(const element of $('delivery-form').elements)element.disabled=value; if(!value){$('idempotency-header').disabled=!$('idempotency-enabled').checked;$('idempotency-key').disabled=!$('idempotency-enabled').checked;for(const id of ['new-job','refresh-jobs','export-workspace','create-job'])$(id).disabled=!workspaceReady;renderActions();}}
+function errorStatus(error){announce(error.message,'error');if(error.status===401){workspaceReady=false;$('reset-workspace').hidden=false;}}
+function formatTime(value){const date=new Date(value);return Number.isNaN(date.valueOf())?'Time unavailable':date.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});}
+function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
+function showComposer(){selected=null;$('composer').hidden=false;$('job-detail').hidden=true;$('authorization').value='';renderHistory();$('compose-title').focus({preventScroll:true});}
+function renderHistory(){const list=$('job-list');list.replaceChildren();$('job-count').textContent=String(jobs.length);$('history-empty').hidden=jobs.length>0;
+  for(const job of jobs){const button=element('button','job-item');button.type='button';button.setAttribute('aria-current',String(selected?.id===job.id));button.append(element('strong','',job.reference||job.id));const row=element('span','job-row');row.append(element('small','',formatTime(job.updatedAt||job.createdAt)),element('span',`state-badge ${job.state}`,stateLabel(job.state)));button.append(row);button.disabled=busy;button.addEventListener('click',()=>openJob(job.id));list.append(button);}
 }
-function badge(text, tone = '') {
-  byId('run-badge').textContent = text;
-  byId('run-badge').className = `run-badge ${tone}`;
+async function refreshHistory(){const data=await api('/api/deliveries');if(!Array.isArray(data.deliveries))throw new APIError('The server returned an unreadable workspace history.',502);jobs=data.deliveries;renderHistory();}
+function renderActions(){if(!selected)return;const allowed=actionAvailability(selected);$('authorization').disabled=busy||!workspaceReady||evidenceStale||!(allowed.send||allowed.retry||allowed.reconcile);$('send-job').hidden=!allowed.send;$('send-job').disabled=busy||!workspaceReady||evidenceStale||!allowed.send;$('reconcile-job').hidden=!allowed.reconcile;$('reconcile-job').disabled=busy||!workspaceReady||evidenceStale||!allowed.reconcile;$('retry-job').hidden=!allowed.retry;$('retry-job').disabled=busy||!workspaceReady||evidenceStale||!allowed.retry;$('retry-job').textContent=allowed.riskRequired?'Review duplicate risk & retry':'Retry delivery';
+  $('action-help').textContent=evidenceStale?'The displayed evidence may be stale. Refresh saved evidence before another destination action.':selected.state==='delivered'?'No additional POST is offered after an acknowledged delivery.':allowed.send?'Send makes a real HTTP POST to the destination above.':allowed.riskRequired?'Another POST may duplicate a side effect. A risk confirmation is required.':'Retry is permitted by the server’s recorded safety contract; it still makes a real HTTP POST.';
 }
-function markSettings() {
-  byId('delay-value').textContent = `${byId('delay').value} ms`;
-  const help = {none:'The destination returns a clean acknowledgement.', before_commit:'The destination explicitly rejects the first attempt before any commit.', after_commit:'The record is committed, but its acknowledgement never arrives.'};
-  byId('fault-help').textContent = help[byId('fault').value];
-  if (lastRun && !running) {
-    stale = JSON.stringify(readSettings()) !== JSON.stringify(lastSettings);
-    if (stale) {
-      badge('PREVIOUS RUN', 'stale');
-      status('Settings changed. The evidence below belongs to the previous run. Run again to compare the new scenario.', 'stale');
-    } else {
-      badge('RUN COMPLETE', 'active');
-      status('Showing the completed run for the selected scenario.');
-    }
-  }
+function renderJournal(delivery){const list=$('timeline');list.replaceChildren();$('journal-empty').hidden=delivery.events.length>0||delivery.attempts.length>0;$('event-count').textContent=`${delivery.events.length} events`;
+  for(const event of delivery.events){const item=element('li');const heading=element('div','event-heading');heading.append(element('span','event-state',stateLabel(event.state)==='Unrecognized state'?event.state.replaceAll('_',' '):stateLabel(event.state)),element('time','event-time',formatTime(event.at)));item.append(heading,element('p','event-reason',event.reason));list.append(item);}
+  for(const attempt of delivery.attempts){const item=element('li');const heading=element('div','event-heading');heading.append(element('span','event-state',`${attempt.kind==='lookup'?'GET receipt lookup':'POST delivery'} · ${attempt.status}`),element('time','event-time',formatTime(attempt.finishedAt||attempt.startedAt)));const evidence=element('div','attempt-evidence',`HTTP ${attempt.httpStatus??'no response'} · ${attempt.responseBytes??0} response bytes`);if(attempt.bodyPreview)evidence.append(element('pre','',typeof attempt.bodyPreview==='string'?attempt.bodyPreview:JSON.stringify(attempt.bodyPreview,null,2)));item.append(heading,element('p','event-reason',attempt.reason||'No additional reason was returned.'),evidence);list.append(item);}
 }
-form.addEventListener('input', markSettings);
-form.addEventListener('change', markSettings);
-function setBusy(value) {
-  running = value;
-  results.setAttribute('aria-busy', String(value));
-  runButton.disabled = value;
-  byId('run-label').textContent = value ? 'Running experiment…' : 'Run both policies';
-  for (const element of form.elements) element.disabled = value;
-  downloadButton.disabled = value || !lastRun;
-}
-function renderPolicy(name, policy) {
-  const view = presentation(policy);
-  const state = byId(`${name}-state`);
-  state.textContent = view.label;
-  state.className = `policy-state ${view.tone}`;
-  for (const metric of ['attempts', 'records', 'duplicates']) byId(`${name}-${metric}`).textContent = String(policy[metric]);
-  byId(`${name}-duplicates`).classList.toggle('has-duplicates', policy.duplicates > 0);
-  byId(`${name}-note`).textContent = view.note;
-  byId(`${name}-receipt-tag`).textContent = policy.receipt ? 'returned evidence' : 'none returned';
-  byId(`${name}-receipt`).textContent = policy.receipt ? JSON.stringify(policy.receipt, null, 2) : 'No validated receipt was returned by this policy. Oracle record counts do not substitute for a receipt.';
-}
-function renderJournal() {
-  const timeline = byId('timeline');
-  timeline.replaceChildren();
-  for (const button of document.querySelectorAll('.journal-tab')) button.setAttribute('aria-pressed', String(button.dataset.policy === selectedPolicy));
-  if (!lastRun) return;
-  const policy = lastRun[selectedPolicy];
-  byId('journal-empty').hidden = policy.events.length > 0;
-  timeline.hidden = policy.events.length === 0;
-  policy.events.forEach((event, index) => {
-    const item = document.createElement('li');
-    if (index === policy.events.length - 1) item.className = 'last';
-    const head = document.createElement('div'); head.className = 'event-head';
-    const state = document.createElement('span'); state.className = 'event-state'; state.textContent = event.state.replaceAll('_', ' ');
-    const count = document.createElement('span'); count.className = 'event-count'; count.textContent = `EVENT ${String(index + 1).padStart(2, '0')}`;
-    const reason = document.createElement('p'); reason.className = 'event-reason'; reason.textContent = event.reason;
-    head.append(state, count); item.append(head, reason); timeline.append(item);
-  });
-  const history = document.createElement('li');
-  const heading = document.createElement('span'); heading.className = 'event-state'; heading.textContent = 'Recorded observations';
-  const observations = document.createElement('p'); observations.className = 'event-reason';
-  observations.textContent = policy.history.map(row => `${String(row.state).replaceAll('_', ' ')}${typeof row.elapsedMs === 'number' ? ` at ${row.elapsedMs.toFixed(1)} ms` : ''}`).join(' → ') || 'No polling snapshots were returned.';
-  history.append(heading, observations); timeline.append(history);
-}
-for (const button of document.querySelectorAll('.journal-tab')) button.addEventListener('click', () => { selectedPolicy = button.dataset.policy; renderJournal(); });
-function render(data, settings) {
-  lastRun = data; lastSettings = settings; stale = false;
-  renderPolicy('naive', data.naive); renderPolicy('reconcile', data.reconcile);
-  byId('run-context').textContent = `${settingsLabel(settings)} / run ${data.runId}`;
-  byId('raw-json').textContent = JSON.stringify(data, null, 2);
-  const summary = data.summary;
-  byId('summary-text').textContent = typeof summary.provenance === 'string' ? `Measured execution: ${summary.provenance}.` : 'Engine results recorded; inspect complete JSON for scope and provenance.';
-  renderJournal();
-  const unresolved = [data.naive.state, data.reconcile.state].some(state => state === 'pending' || state === 'needs_review');
-  status(unresolved ? 'Run complete. At least one policy has an unresolved outcome; inspect its evidence before any retry.' : 'Run complete. Compare the observed records with each policy’s knowledge.');
-  badge('RUN COMPLETE', 'active');
-}
-form.addEventListener('submit', async event => {
-  event.preventDefault();
-  if (running) return;
-  const settings = readSettings();
-  setBusy(true); badge('RUNNING', 'stale');
-  status(lastRun ? 'Running both policies in isolated stores. Previous results remain below until the new run completes.' : 'Running both policies against the local fixture. Waiting for actual engine evidence…', 'loading');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch('/api/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(settings), signal:controller.signal});
-    if (!response.ok) {
-      if (response.status === 429 || response.status === 503) throw new Error('The recovery desk is busy. Wait for the active run to finish, then try again. No automatic retry was sent.');
-      throw new Error(`The engine could not complete this request (HTTP ${response.status}). No automatic retry was sent.`);
-    }
-    const data = validateRun(await response.json());
-    render(data, settings);
-    byId('results-title').focus({preventScroll:true});
-  } catch (error) {
-    const message = error.name === 'AbortError' ? 'The request timed out. Its outcome is unknown; no automatic retry was sent. Previous evidence, if any, remains unchanged.' : error instanceof SyntaxError ? 'The engine returned unreadable evidence. No successful outcome is being inferred.' : error.message || 'Unable to reach the local engine. Check that the server is running.';
-    status(message, 'error'); badge(lastRun ? 'PREVIOUS RUN' : 'NO RESULT', 'stale');
-    if (lastRun) stale = true;
-  } finally {
-    clearTimeout(timeout); setBusy(false);
-  }
-});
-downloadButton.addEventListener('click', () => {
-  if (!lastRun || running) return;
-  const payload = {exportSchemaVersion:1, scenario:lastSettings, result:lastRun};
-  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2) + '\n'], {type:'application/json'}));
-  const anchor = document.createElement('a'); anchor.href = url; anchor.download = exportName(lastRun.runId); anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-markSettings();
+function renderJob(delivery){selected=validateDelivery(delivery);evidenceStale=false;$('composer').hidden=true;$('job-detail').hidden=false;$('job-title').textContent=delivery.reference;$('job-id').textContent=delivery.id;$('job-state').textContent=stateLabel(delivery.state);$('job-state').className=`state-badge ${delivery.state}`;$('job-endpoint').textContent=delivery.destination;$('job-created').textContent=`Created ${formatTime(delivery.createdAt)}`;$('job-contract').textContent=delivery.idempotency?'Declared idempotency contract':'No idempotency guarantee declared';
+  const posts=delivery.attempts.filter(attempt=>attempt.kind==='post'),lookups=delivery.attempts.filter(attempt=>attempt.kind==='lookup');$('attempt-count').textContent=String(posts.length);$('lookup-count').textContent=String(lookups.length);$('response-status').textContent=posts.at(-1)?.httpStatus??'—';$('outcome-note').textContent=outcomeExplanation(delivery);$('saved-payload').textContent=JSON.stringify(delivery.payload,null,2);$('job-json').textContent=JSON.stringify(delivery,null,2);renderActions();renderJournal(delivery);renderHistory();}
+async function openJob(id){if(busy)return;setBusy(true);announce('Opening the saved delivery…','loading');$('authorization').value='';try{const data=await api(`/api/deliveries/${encodeURIComponent(id)}`);renderJob(data.delivery);announce('Saved delivery loaded. The journal reflects recorded actions, not a new send.');$('job-title').focus({preventScroll:true});}catch(error){errorStatus(error);}finally{setBusy(false);}}
+async function bootstrap({fresh=false}={}){setBusy(true);announce('Opening your private workspace…','loading');try{token=fresh?null:loadToken();if(!token){const data=await api('/api/workspaces',{method:'POST',body:{},authorize:false});if(typeof data.token!=='string'||data.token.length<20)throw new APIError('The workspace key could not be created.',502);token=data.token;const persisted=persistToken(token);if(!persisted)$('workspace-note').textContent='This browser could not save the workspace access key. Keep this page open: reloading may lose access. Endpoint credentials are never stored.';}
+  await refreshHistory();workspaceReady=true;$('reset-workspace').hidden=true;announce('Workspace ready. Create a delivery or reopen one from your history. No destination request was sent while opening this page.');}
+  catch(error){errorStatus(error);}finally{setBusy(false);}}
+$('delivery-form').addEventListener('submit',async event=>{event.preventDefault();if(busy||!workspaceReady)return;let body;try{body=createInput({destination:$('endpoint').value,reference:$('reference').value,payloadText:$('payload').value,idempotencyEnabled:$('idempotency-enabled').checked,idempotencyHeader:$('idempotency-header').value,idempotencyKey:$('idempotency-key').value,lookupURL:$('lookup-url').value,recordsPointer:$('records-pointer').value,referencePointer:$('receipt-path').value});}catch(error){announce(error.message,'error');return;}
+  setBusy(true);announce('Saving the delivery draft. Nothing is being sent to the destination…','loading');try{const data=await api('/api/deliveries',{method:'POST',body});renderJob(data.delivery);await refreshHistory();announce('Delivery saved, not sent. Review it, then choose Send delivery.');$('job-title').focus({preventScroll:true});}catch(error){errorStatus(error);}finally{setBusy(false);}});
+$('idempotency-enabled').addEventListener('change',()=>{$('idempotency-header').disabled=!$('idempotency-enabled').checked;$('idempotency-key').disabled=!$('idempotency-enabled').checked;});
+$('load-example').addEventListener('click',()=>{$('payload').value=JSON.stringify({event:'order.created',data:{orderId:'example-1042'}},null,2);$('reference').value='example-order-1042';announce('Example payload loaded. Enter your own HTTPS endpoint before creating the delivery.');$('endpoint').focus();});
+$('new-job').addEventListener('click',()=>{if(!busy)showComposer();});
+$('refresh-jobs').addEventListener('click',async()=>{if(busy)return;setBusy(true);announce('Refreshing saved evidence…','loading');try{await refreshHistory();if(selected){const data=await api(`/api/deliveries/${encodeURIComponent(selected.id)}`);renderJob(data.delivery);}announce('History refreshed. No destination request was sent.');}catch(error){errorStatus(error);}finally{setBusy(false);}});
+function confirmAction({title,copy,label,risk=false}){return new Promise(resolve=>{const dialog=$('confirm-dialog');$('confirm-title').textContent=title;$('confirm-copy').textContent=copy;$('confirm-action').textContent=label;$('risk-row').hidden=!risk;$('risk-ack').checked=false;$('confirm-action').disabled=risk;const changed=()=>{$('confirm-action').disabled=risk&&!$('risk-ack').checked;};$('risk-ack').addEventListener('change',changed);dialog.returnValue='cancel';dialog.addEventListener('close',()=>{$('risk-ack').removeEventListener('change',changed);resolve(dialog.returnValue==='confirm'&&(!risk||$('risk-ack').checked));},{once:true});dialog.showModal();});}
+async function act(kind){if(busy||!selected||evidenceStale||!workspaceReady)return;let riskConfirmed=false;if(kind==='retry'&&!selected.canRetrySafely){riskConfirmed=await confirmAction({title:'Another POST can create a duplicate',copy:`The previous outcome is unresolved. Retrying ${selected.reference} sends another real POST to ${selected.destination}. The destination may already have acted.`,label:'Confirm risk & retry',risk:true});if(!riskConfirmed)return;}
+  const id=selected.id,value=$('authorization').value.trim(),credential=value?{name:'Authorization',value}:null;$('authorization').value='';setBusy(true);announce(kind==='reconcile'?'Looking up actual destination evidence…':'Sending a real HTTP POST. Waiting for the destination…','loading');
+  try{const body={credential};if(kind==='retry'&&riskConfirmed)body.riskConfirmed=true;const data=await api(`/api/deliveries/${encodeURIComponent(id)}/${kind}`,{method:'POST',body});renderJob(data.delivery);await refreshHistory();announce(outcomeExplanation(selected),['unknown','needs_review','failed'].includes(selected.state)?'warning':'');}
+  catch(error){evidenceStale=true;errorStatus(error);if(selected)$('job-state').textContent='Refresh required';$('job-state').className='state-badge unknown';$('outcome-note').textContent='The latest action did not return conclusive evidence to this page. Refresh this saved job before another send.';}
+  finally{setBusy(false);}}
+$('send-job').addEventListener('click',()=>act('send'));$('reconcile-job').addEventListener('click',()=>act('reconcile'));$('retry-job').addEventListener('click',()=>act('retry'));
+function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('export-job').addEventListener('click',()=>{if(selected&&!busy)download({exportSchemaVersion:1,delivery:selected},exportName(selected.id));});
+$('export-workspace').addEventListener('click',async()=>{if(busy)return;setBusy(true);try{const data=await api('/api/export');download(data,'checkpoint-workspace.json');announce('Workspace export downloaded. The access key and session credentials are not included.');}catch(error){errorStatus(error);}finally{setBusy(false);}});
+$('delete-job').addEventListener('click',async()=>{if(busy||!selected)return;const id=selected.id;if(!await confirmAction({title:'Delete this delivery?',copy:'This removes the saved payload and journal from your workspace. It cannot undo a request already sent to the destination.',label:'Delete job'}))return;setBusy(true);try{await api(`/api/deliveries/${encodeURIComponent(id)}`,{method:'DELETE'});showComposer();await refreshHistory();announce('Delivery deleted from this workspace. Any destination side effect remains unchanged.');}catch(error){errorStatus(error);}finally{setBusy(false);}});
+$('reset-workspace').addEventListener('click',async()=>{if(busy)return;if(await confirmAction({title:'Start a new workspace?',copy:'This replaces this browser’s saved access key. Existing jobs will not be accessible with the new key. It does not delete old deliveries or undo requests.',label:'New workspace'}))await bootstrap({fresh:true});});
+bootstrap();
