@@ -76,11 +76,28 @@ test('configuration and response redaction reject unsafe headers/pointers and ne
 });
 
 test('native Vercel relay forwards parsed JSON and only the intended authentication headers',async()=>{
- const {default:relay}=await import('../api/[...path].js');const original=globalThis.fetch;let captured;
+ const {default:relay}=await import('../api/product.js');const original=globalThis.fetch;let captured;
  globalThis.fetch=async(url,options)=>{captured={url,options};return new Response('{"deliveries":[]}',{status:200,headers:{'content-type':'application/json'}});};
  const output={headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.statusCode=n;return this;},json(value){this.value=value;return this;},end(){}};
- try{await relay({url:'/api/deliveries',method:'POST',headers:{origin:'https://steel-checkpoint.vercel.app',authorization:'Bearer workspace-private',cookie:'do-not-forward','content-length':'999','content-type':'application/json'},body:{destination:'https://example.org/webhook',reference:'relay',payload:{real:true}}},output);assert.equal(output.statusCode,200);assert.equal(captured.url,'https://checkpoint-production-81f4.up.railway.app/api/deliveries');assert.equal(JSON.parse(captured.options.body).reference,'relay');assert.deepEqual(Object.keys(captured.options.headers).sort(),['Authorization','Content-Type','Origin']);assert.equal(captured.options.redirect,'manual');}
+ try{await relay({url:'/api/product?path=%2Fapi%2Fdeliveries',method:'POST',headers:{origin:'https://steel-checkpoint.vercel.app',authorization:'Bearer workspace-private',cookie:'do-not-forward','content-length':'999','content-type':'application/json'},body:{destination:'https://example.org/webhook',reference:'relay',payload:{real:true}}},output);assert.equal(output.statusCode,200);assert.equal(captured.url,'https://checkpoint-production-81f4.up.railway.app/api/deliveries');assert.equal(JSON.parse(captured.options.body).reference,'relay');assert.deepEqual(Object.keys(captured.options.headers).sort(),['Authorization','Content-Type','Origin']);assert.equal(captured.options.redirect,'manual');}
  finally{globalThis.fetch=original;}
+});
+
+test('flat native relay preserves nested delivery paths and rejects ambiguous routing before fetch',async()=>{
+ const {default:relay}=await import('../api/product.js');const original=globalThis.fetch;let calls=[];
+ globalThis.fetch=async(url,options)=>{calls.push({url,method:options.method});return new Response('{"delivery":{"state":"queued"}}',{status:200});};
+ const output=()=>({setHeader(){},status(n){this.statusCode=n;return this;},json(v){this.value=v;return this;},end(){}});
+ const id='12345678-abcd-1234-abcd-123456789abc';
+ try{
+  for(const [method,path]of [['GET','/api/deliveries/'+id],['POST','/api/deliveries/'+id+'/send'],['POST','/api/deliveries/'+id+'/reconcile'],['POST','/api/deliveries/'+id+'/retry'],['DELETE','/api/deliveries/'+id]]){
+   const out=output();await relay({url:'/api/product?path='+encodeURIComponent(path),method,headers:{'content-type':'application/json'},body:method==='POST'?{}:undefined},out);assert.equal(out.statusCode,200);assert.equal(calls.at(-1).url,'https://checkpoint-production-81f4.up.railway.app'+path);assert.equal(calls.at(-1).method,method);
+  }
+  const before=calls.length;
+  for(const url of ['/api/product','/api/product?path=/api/export&path=/api/workspaces','/api/product?path=/api/export&other=1','/api/product?path=https://example.org/api/export','/api/product?path=/api/deliveries/'+id+'/send?x=1','/api/product?path=/api/../export','/api/product?path=%252Fapi%252Fexport','/api/deliveries/'+id]){
+   const out=output();await relay({url,method:'GET',headers:{}},out);assert.ok([400,404].includes(out.statusCode),url);
+  }
+  assert.equal(calls.length,before);
+ }finally{globalThis.fetch=original;}
 });
 
 test('root launcher fails without explicit drop and refuses untrusted DATA_DIR before opening HTTP',async t=>{

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateDelivery,stateLabel,actionAvailability,outcomeExplanation,httpsURL,createInput,exportName} from './view-model.js';
+import {apiEndpoint,validateDelivery,stateLabel,actionAvailability,outcomeExplanation,httpsURL,createInput,exportName} from './view-model.js';
 const draft=()=>({id:'job-1',reference:'order-1042',destination:'https://receiver.example/webhook',payload:{event:'created'},state:'queued',createdAt:'2026-10-31T00:00:00Z',updatedAt:'2026-10-31T00:00:00Z',attempts:[],events:[],lookup:null,idempotency:null,canRetrySafely:false});
 const input=()=>({destination:'https://receiver.example/webhook',reference:'order-1042',payloadText:'{"event":"created"}',idempotencyEnabled:false,idempotencyHeader:'',lookupURL:'',recordsPointer:'',referencePointer:''});
 test('validates real delivery shape without manufacturing attempts',()=>{const d=draft();assert.equal(validateDelivery(d),d);assert.equal(d.attempts.length,0);});
@@ -31,3 +31,6 @@ test('saved preference wins over OS changes and restores on a fresh load',()=>{c
 test('use system clears override and follows subsequent OS changes',()=>{const f=themeFixture({saved:'dark'});f.systemButton.listeners.click();assert.equal(f.values.has('checkpoint-theme'),false);assert.equal(f.root.dataset.theme,'light');assert.equal(f.systemButton.hidden,true);f.media.matches=true;f.media.change();assert.equal(f.root.dataset.theme,'dark');});
 test('blocked localStorage never prevents theme switching or initialization',()=>{const f=themeFixture({blocked:true,dark:true});f.button.listeners.click();assert.equal(f.root.dataset.theme,'light');assert.equal(f.button.attributes['aria-pressed'],'false');});
 test('storage sync applies another tab preference without changing run state',()=>{const f=themeFixture();f.values.set('checkpoint-theme','dark');f.controller.sync();assert.equal(f.root.dataset.theme,'dark');assert.equal(f.meta.attributes.content,'#181d18');});
+
+test('flat relay preserves canonical nested routes as one encoded path parameter',()=>{const path='/api/deliveries/8ed25933-5c7d-40f9-a90e-0062bb6c9773/send';assert.equal(apiEndpoint(path),'/api/product?path=%2Fapi%2Fdeliveries%2F8ed25933-5c7d-40f9-a90e-0062bb6c9773%2Fsend');for(const route of ['/api/workspaces','/api/deliveries','/api/export'])assert.equal(new URL(apiEndpoint(route),'https://checkpoint.example').searchParams.get('path'),route);});
+test('relay helper rejects query injection and paths outside the product API',()=>{for(const path of ['/api/deliveries?path=/api/export','/api/deliveries/../export','https://elsewhere.example/api/export','/api/run','/api/product','/api/deliveries/not-a-uuid/send'])assert.throws(()=>apiEndpoint(path));});

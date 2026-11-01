@@ -1,3 +1,9 @@
+/** Vercel native functions use a flat relay; only known canonical product routes enter it. */
+export function apiEndpoint(path) {
+  const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+  if(typeof path!=='string'||!new RegExp(`^/api/(?:workspaces|export|deliveries(?:/${uuid}(?:/(?:send|reconcile|retry))?)?)$`).test(path))throw new Error('Unsupported product API route.');
+  return `/api/product?path=${encodeURIComponent(path)}`;
+}
 /** Product presentation boundary. Network and business success are kept distinct. */
 const STATES = new Set(['queued','delivering','delivered','unknown','failed','needs_review']);
 export const stateLabel = state => ({queued:'Ready to send',delivering:'Sending',delivered:'HTTP acknowledged',unknown:'Outcome unknown',failed:'Failed',needs_review:'Needs review'}[state] || 'Unrecognized state');

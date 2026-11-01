@@ -1,4 +1,4 @@
-import {createThemeController,createInput,validateDelivery,stateLabel,actionAvailability,outcomeExplanation,exportName} from './view-model.js';
+import {createThemeController,apiEndpoint,createInput,validateDelivery,stateLabel,actionAvailability,outcomeExplanation,exportName} from './view-model.js';
 const $=id=>document.getElementById(id);
 let storage=null;try{storage=window.localStorage;}catch{}
 const theme=createThemeController({root:document.documentElement,button:$('theme-toggle'),systemButton:$('theme-system'),status:$('theme-status'),meta:document.querySelector('meta[name="theme-color"]'),media:window.matchMedia('(prefers-color-scheme: dark)'),storage});
@@ -12,7 +12,7 @@ async function api(path,{method='GET',body,authorize=true}={}){
   const headers={};if(body!==undefined)headers['Content-Type']='application/json';if(authorize&&token)headers.Authorization=`Bearer ${token}`;
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);
   try{
-    const response=await fetch(path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,cache:'no-store'});
+    const response=await fetch(apiEndpoint(path),{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal,cache:'no-store'});
     let data=null;if(response.status!==204){try{data=await response.json();}catch{throw new APIError('The server returned unreadable evidence. Refresh the saved job before taking another action.',response.status);}}
     if(!response.ok){const message=typeof data?.error==='string'?data.error:typeof data?.error?.message==='string'?data.error.message:`Request could not complete (HTTP ${response.status}).`;throw new APIError(response.status===429?'The workspace is busy or its request budget is exhausted. Wait, then refresh. No automatic retry was sent.':message,response.status);}
     return data;
